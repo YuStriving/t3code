@@ -1,0 +1,43 @@
+name: Sync upstream
+
+on:
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'YuStriving/t3code'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out fork main
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.UPSTREAM_SYNC_TOKEN || github.token }}
+
+      - name: Merge upstream main without force-pushing
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch --no-tags https://github.com/pingdotgg/t3code.git refs/heads/main
+          if git merge-base --is-ancestor FETCH_HEAD HEAD; then
+            echo 'Fork already contains upstream main.'
+            exit 0
+          fi
+          if ! git merge --no-edit FETCH_HEAD; then
+            echo '::error::Upstream merge failed. Resolve the merge locally before retrying.'
+            exit 1
+          fi
+          git push origin HEAD:refs/heads/main
